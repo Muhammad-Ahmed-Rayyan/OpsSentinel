@@ -1,0 +1,9 @@
+langgraph
+langchain-openai
+langchain-groq
+chromadb
+pydantic
+python-dotenv
+
+[dev]
+pytest

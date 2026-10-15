@@ -1,0 +1,20 @@
+[
+  {
+    "source": "prometheus",
+    "payload": {
+      "alertname": "HighErrorRate",
+      "labels": {"service": "checkout-api", "severity": "critical"},
+      "annotations": {"summary": "5xx error rate at 38% for 5m"},
+      "startsAt": "2026-10-15T09:12:00Z"
+    }
+  },
+  {
+    "source": "datadog",
+    "payload": {
+      "title": "Disk usage above 95% on log-server-02",
+      "priority": "P2",
+      "tags": ["host:log-server-02", "env:prod"],
+      "last_triggered_ts": 1760519700
+    }
+  }
+]
