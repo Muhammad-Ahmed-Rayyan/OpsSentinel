@@ -2,6 +2,7 @@ from datetime import datetime, timezone
 
 from pydantic import ValidationError
 
+from opssentinel.audit import audit_entry
 from opssentinel.schemas import NormalizedAlert
 from opssentinel.state import IncidentState
 
@@ -63,15 +64,6 @@ def normalize_alert(raw_alert: dict) -> NormalizedAlert:
     return parser(raw_alert["payload"])
 
 
-def _audit_entry(action: str, detail: str) -> dict:
-    return {
-        "timestamp": datetime.now(timezone.utc).isoformat(),
-        "agent": AGENT_NAME,
-        "action": action,
-        "detail": detail,
-    }
-
-
 def ingest_alert(state: IncidentState) -> dict:
     """LangGraph node: fill state['alert'] from state['raw_alert'].
 
@@ -85,11 +77,15 @@ def ingest_alert(state: IncidentState) -> dict:
         alert = normalize_alert(state["raw_alert"])
     except (KeyError, ValueError, TypeError, ValidationError) as exc:
         errors.append({"agent": AGENT_NAME, "error": f"{type(exc).__name__}: {exc}"})
-        audit_log.append(_audit_entry("ingestion_failed", str(exc)))
+        audit_log.append(audit_entry(AGENT_NAME, "ingestion_failed", str(exc)))
         return {"status": "failed", "errors": errors, "audit_log": audit_log}
 
     audit_log.append(
-        _audit_entry("alert_normalized", f"{alert.source} alert '{alert.name}' ({alert.severity})")
+        audit_entry(
+            AGENT_NAME,
+            "alert_normalized",
+            f"{alert.source} alert '{alert.name}' ({alert.severity})",
+        )
     )
     return {
         "alert": alert.model_dump(mode="json"),
