@@ -14,7 +14,7 @@
       "title": "Disk usage above 95% on log-server-02",
       "priority": "P2",
       "tags": ["host:log-server-02", "env:prod"],
-      "last_triggered_ts": 1760519700
+      "last_triggered_ts": 1792055700
     }
   }
 ]

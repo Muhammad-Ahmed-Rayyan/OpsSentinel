@@ -1,0 +1,12 @@
+[
+  {"timestamp": "2026-10-15T09:01:00Z", "service": "checkout-api", "host": "web-01", "level": "INFO", "message": "Request handled"},
+  {"timestamp": "2026-10-15T09:04:10Z", "service": "checkout-api", "host": "web-01", "level": "ERROR", "message": "NullPointerException in PaymentValidator.validate"},
+  {"timestamp": "2026-10-15T09:05:30Z", "service": "checkout-api", "host": "web-02", "level": "ERROR", "message": "NullPointerException in PaymentValidator.validate"},
+  {"timestamp": "2026-10-15T09:06:00Z", "service": "inventory-api", "host": "web-03", "level": "ERROR", "message": "Redis connection reset"},
+  {"timestamp": "2026-10-15T09:07:45Z", "service": "checkout-api", "host": "web-01", "level": "ERROR", "message": "NullPointerException in PaymentValidator.validate"},
+  {"timestamp": "2026-10-15T09:09:20Z", "service": "checkout-api", "host": "web-02", "level": "WARN", "message": "Upstream timeout calling payment-gateway"},
+  {"timestamp": "2026-10-15T09:10:05Z", "service": "checkout-api", "host": "web-01", "level": "ERROR", "message": "NullPointerException in PaymentValidator.validate"},
+  {"timestamp": "2026-10-15T09:02:00Z", "service": "log-shipper", "host": "log-server-02", "level": "WARN", "message": "Disk usage at 88% on /var/log"},
+  {"timestamp": "2026-10-15T09:08:00Z", "service": "log-shipper", "host": "log-server-02", "level": "ERROR", "message": "Log rotation failed: no space left on device"},
+  {"timestamp": "2026-10-15T09:14:00Z", "service": "log-shipper", "host": "log-server-02", "level": "ERROR", "message": "Write failed: no space left on device"}
+]
