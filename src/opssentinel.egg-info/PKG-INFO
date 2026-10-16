@@ -4,6 +4,7 @@ Version: 0.1.0
 Summary: Multi-agent incident response and on-call triage system
 Requires-Python: >=3.10
 Requires-Dist: langgraph
+Requires-Dist: langchain-core
 Requires-Dist: langchain-openai
 Requires-Dist: langchain-groq
 Requires-Dist: chromadb

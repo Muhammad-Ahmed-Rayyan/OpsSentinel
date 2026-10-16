@@ -1,10 +1,13 @@
 README.md
 pyproject.toml
 src/opssentinel/__init__.py
+src/opssentinel/action.py
+src/opssentinel/audit.py
 src/opssentinel/config.py
 src/opssentinel/graph.py
 src/opssentinel/llm.py
 src/opssentinel/main.py
+src/opssentinel/schemas.py
 src/opssentinel/state.py
 src/opssentinel.egg-info/PKG-INFO
 src/opssentinel.egg-info/SOURCES.txt
@@ -13,5 +16,12 @@ src/opssentinel.egg-info/requires.txt
 src/opssentinel.egg-info/top_level.txt
 src/opssentinel/agents/__init__ copy.py
 src/opssentinel/agents/__init__.py
+src/opssentinel/agents/correlation.py
+src/opssentinel/agents/ingestion.py
+src/opssentinel/tools/knowledge_base.py
+src/opssentinel/tools/telemetry.py
+tests/test_actions.py
+tests/test_correlation.py
 tests/test_ingestion.py
+tests/test_knowledge_base.py
 tests/test_state.py
