@@ -1,0 +1,65 @@
+[
+  {
+    "id": "PM-001",
+    "title": "Checkout 5xx spike after payment refactor release",
+    "service": "checkout-api",
+    "symptoms": "5xx error rate jumped from under 1% to over 30% within 10 minutes of a deployment; NullPointerException errors in the payment validation code path; unaffected services showed normal latency",
+    "root_cause": "Null handling bug introduced by the latest release in payment validation",
+    "remediation_action": "rollback_deployment",
+    "resolution": "Rolled back to the previous version; error rate returned to baseline in 6 minutes; fix shipped next day with a regression test"
+  },
+  {
+    "id": "PM-002",
+    "title": "Log server disk full from failed log rotation",
+    "service": "log-shipper",
+    "symptoms": "disk usage above 90% and rising steadily; log rotation job failing with no space left on device; write failures in the log pipeline",
+    "root_cause": "Log rotation job stopped compressing old files so archived logs filled the volume",
+    "remediation_action": "cleanup_old_logs",
+    "resolution": "Deleted archived logs older than 7 days on the host and usage dropped to 55%; rotation schedule repaired"
+  },
+  {
+    "id": "PM-003",
+    "title": "Recommendation service memory leak",
+    "service": "recommendation-service",
+    "symptoms": "memory usage climbing steadily for hours with no matching traffic increase; instances killed by out-of-memory; periodic latency spikes before each restart",
+    "root_cause": "Unbounded in-memory cache growing until the process runs out of memory",
+    "remediation_action": "restart_service",
+    "resolution": "Rolling restart cleared memory; cache size limit added in the next release"
+  },
+  {
+    "id": "PM-004",
+    "title": "Stale prices shown after pricing update",
+    "service": "catalog-api",
+    "symptoms": "customers see outdated prices; no errors in logs; cache hit rate normal; no recent deployment of catalog-api but a bulk pricing data import ran",
+    "root_cause": "Cache kept serving old values because invalidation did not run after a bulk data import",
+    "remediation_action": "clear_cache",
+    "resolution": "Flushed the catalog cache and correct prices appeared immediately; invalidation hook added to the import job"
+  },
+  {
+    "id": "PM-005",
+    "title": "API gateway saturated during traffic spike",
+    "service": "api-gateway",
+    "symptoms": "CPU above 90% on all instances; request queue growing; latency rising gradually; request volume more than double the normal level; no recent deployment",
+    "root_cause": "Legitimate traffic surge exceeded provisioned capacity",
+    "remediation_action": "scale_up_service",
+    "resolution": "Added instances and latency recovered within 10 minutes; autoscaling thresholds lowered"
+  },
+  {
+    "id": "PM-006",
+    "title": "Orders failing after database connection pool change",
+    "service": "order-api",
+    "symptoms": "connection pool exhausted errors and request timeouts beginning right after a release that changed database settings; error rate rising; database itself healthy",
+    "root_cause": "Release reduced the connection pool size below what production traffic needs",
+    "remediation_action": "rollback_deployment",
+    "resolution": "Rolled back the release and timeouts stopped within 5 minutes; pool size corrected and load tested before redeploy"
+  },
+  {
+    "id": "PM-007",
+    "title": "Checkout timeouts caused by payment provider outage",
+    "service": "checkout-api",
+    "symptoms": "timeouts calling the external payment gateway; elevated 5xx only on payment requests; no recent deployment of our services; provider status page reported an incident",
+    "root_cause": "Third-party payment provider outage outside our control",
+    "remediation_action": "escalate_to_human",
+    "resolution": "On-call engineer enabled the fallback provider and contacted provider support; a rollback would not have helped"
+  }
+]
