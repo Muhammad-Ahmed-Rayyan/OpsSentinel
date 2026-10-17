@@ -1,8 +1,16 @@
-from typing import TypedDict, Literal
+from typing import Literal, TypedDict
 
 Status = Literal[
-    "ingested", "correlated", "hypothesized", "awaiting_approval",
-    "executing", "verifying", "resolved", "escalated", "failed",
+    "ingested",
+    "correlated",
+    "hypothesized",
+    "awaiting_approval",
+    "executing",
+    "verifying",
+    "resolved",
+    "rejected",
+    "escalated",
+    "failed",
 ]
 
 
@@ -10,7 +18,7 @@ class IncidentState(TypedDict, total=False):
     incident_id: str
     raw_alert: dict          # alert exactly as the monitoring tool sent it
     alert: dict              # normalized alert (Ingestion Agent output)
-    context: dict            # correlated logs, metrics, deploys (Correlation Agent)
+    context: dict            # correlated logs, metrics, deployments (Correlation Agent)
     hypotheses: list         # ranked root causes (Hypothesis Agent)
     proposed_action: dict    # chosen remediation + parameters
     risk_tier: str           # "low" or "high"
