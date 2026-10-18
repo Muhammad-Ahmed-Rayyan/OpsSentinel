@@ -58,12 +58,12 @@ def main() -> None:
 
     print("\n" + "=" * 70)
     print(f"{incident_id} finished with status: {result['status']}")
-    print("Execution result:", json.dumps(result.get("execution_result")))
-    print("Errors:", result["errors"])
-    print("\nAudit trail:")
-    for entry in result["audit_log"]:
-        print(f"  {entry['timestamp']} [{entry['agent']}] {entry['action']}: {entry['detail']}")
-    print("\nInfrastructure after: ", json.dumps(infra.state))
+    print("Execution:   ", json.dumps(result.get("execution_result")))
+    print("Verification:", json.dumps(result.get("verification")))
+    print("Errors:      ", result["errors"])
+    print("Report saved:", result.get("report_path", "(could not be saved)"))
+    print("\n" + result["report"])
+    print("Infrastructure after:", json.dumps(infra.state))
 
 
 if __name__ == "__main__":
