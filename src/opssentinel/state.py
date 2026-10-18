@@ -25,7 +25,8 @@ class IncidentState(TypedDict, total=False):
     approval: dict           # human decision: approved / rejected / comment
     execution_result: dict   # output of the remediation tool
     verification: dict       # did the fix work?
-    report: str              # final postmortem
+    report: str              # final postmortem (Markdown)
+    report_path: str         # where the postmortem was saved
     status: str
     errors: list             # failures recorded for handling/escalation
     audit_log: list          # every agent action, timestamped
