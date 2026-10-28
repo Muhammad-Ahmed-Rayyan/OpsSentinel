@@ -13,6 +13,7 @@ def build_approval_request(state: IncidentState) -> dict:
     top = hypotheses[0] if hypotheses else {}
     proposal = state.get("proposed_action", {})
     return {
+        "kind": "approval",
         "incident_id": state.get("incident_id"),
         "alert": f"{alert.get('name')}: {alert.get('summary')}",
         "likely_cause": top.get("cause"),
