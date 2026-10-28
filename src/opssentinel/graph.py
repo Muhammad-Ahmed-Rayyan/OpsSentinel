@@ -72,15 +72,20 @@ def build_graph(
     verify_interval_seconds: float = 0.0,
     dedup_window_minutes: int = 30,
     min_severity: str = "medium",
+    runbook_fn=None,
 ):
-    """Compile the incident-response graph. A checkpointer is required for interrupts."""
+    """Compile the incident-response graph. A checkpointer is required for interrupts.
+
+    runbook_fn: search function for runbooks. None switches runbook retrieval off, which
+    keeps tests isolated; the CLI passes the real search.
+    """
     infra = infra if infra is not None else SimulatedInfrastructure()
     deduplicator = AlertDeduplicator(dedup_window_minutes)
 
     builder = StateGraph(IncidentState)
     builder.add_node("ingestion", make_ingestion_agent(deduplicator, min_severity))
     builder.add_node("correlation", correlate_incident)
-    builder.add_node("hypothesis", make_hypothesis_agent(llm, search_fn))
+    builder.add_node("hypothesis", make_hypothesis_agent(llm, search_fn, runbook_fn))
     builder.add_node("approval_gate", approval_gate)
     builder.add_node("execution", make_execution_agent(infra))
     builder.add_node(

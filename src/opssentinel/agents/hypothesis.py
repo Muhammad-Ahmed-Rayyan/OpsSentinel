@@ -15,12 +15,14 @@ ESCALATE = "escalate_to_human"
 CATALOG_PLACEHOLDER = "<<ACTION_CATALOG>>"
 
 SYSTEM_PROMPT = f"""You are the Root-Cause Hypothesis Agent in an incident response system.
-Given an alert, correlated evidence and similar past incidents, produce ranked root-cause
+Given an alert, correlated evidence, similar past incidents and runbooks, produce ranked root-cause
 hypotheses and ONE proposed remediation action.
 
 Rules:
 - Base every hypothesis only on the evidence provided. Never invent logs, metrics or deployments.
 - Past incidents are hints, not proof. Prefer causes supported by the current evidence.
+- Runbooks are the approved procedures for each action. If a runbook caution applies to this
+  incident, mention it in the rationale, and prefer escalate_to_human over an action the caution rules out.
 - Choose the action ONLY from the action catalog below and fill every required parameter with
   values found in the evidence (service names, versions, hosts).
 - If no catalog action is clearly justified, use escalate_to_human.
@@ -43,7 +45,9 @@ def _build_query(alert: dict, context: dict) -> str:
     return alert["summary"] + " " + " ".join(context.get("signals", []))
 
 
-def _build_user_prompt(alert: dict, context: dict, similar: list[dict]) -> str:
+def _build_user_prompt(
+    alert: dict, context: dict, similar: list[dict], runbooks: list[dict]
+) -> str:
     lines = [
         "ALERT",
         f"- source: {alert['source']}, name: {alert['name']}, severity: {alert['severity']}",
@@ -76,12 +80,20 @@ def _build_user_prompt(alert: dict, context: dict, similar: list[dict]) -> str:
             for s in similar
         ],
     )
+    lines += _section(
+        "RELEVANT RUNBOOKS (approved procedures; respect the cautions)",
+        [
+            f"- {rb.get('id', '?')} {rb.get('title', '')} [action: {rb.get('action', '?')}]: "
+            f"steps: {rb.get('steps', '')}; cautions: {rb.get('cautions', '')}"
+            for rb in runbooks
+        ],
+    )
     return "\n".join(lines)
 
 
 def _response_text(response) -> str:
     content = response.content
-    if isinstance(content, list):
+    if isinstance(content, list):  # some providers return content blocks
         return "".join(
             part.get("text", "") if isinstance(part, dict) else str(part) for part in content
         )
@@ -106,8 +118,12 @@ def _check_action(report: HypothesisReport) -> ActionSpec:
     return spec
 
 
-def make_hypothesis_agent(llm, search_fn=search_similar_incidents):
-    """Build the LangGraph node. The LLM and search function are injected so tests can fake them."""
+def make_hypothesis_agent(llm, search_fn=search_similar_incidents, runbook_fn=None):
+    """Build the LangGraph node.
+
+    The LLM, the past-incident search and the runbook search are injected so tests can fake
+    them. runbook_fn=None switches runbook retrieval off.
+    """
 
     def hypothesize(state: IncidentState) -> dict:
         audit_log = list(state.get("audit_log", []))
@@ -126,12 +142,28 @@ def make_hypothesis_agent(llm, search_fn=search_similar_incidents):
 
         try:
             similar = search_fn(query)
-        except Exception as exc:
+        except Exception as exc:  # knowledge base down: carry on without history
             similar = []
             errors.append({"agent": AGENT_NAME, "error": f"knowledge base unavailable: {exc}"})
 
+        runbooks: list[dict] = []
+        if runbook_fn is not None:
+            try:
+                runbooks = runbook_fn(query)
+            except Exception as exc:  # runbooks down: carry on without them
+                errors.append({"agent": AGENT_NAME, "error": f"runbooks unavailable: {exc}"})
+
+        runbook_ids = ", ".join(str(rb.get("id", "?")) for rb in runbooks) or "none"
+        audit_log.append(
+            audit_entry(
+                AGENT_NAME,
+                "knowledge_retrieved",
+                f"{len(similar)} past incidents, {len(runbooks)} runbooks ({runbook_ids})",
+            )
+        )
+
         try:
-            user_prompt = _build_user_prompt(alert, context, similar)
+            user_prompt = _build_user_prompt(alert, context, similar, runbooks)
         except (KeyError, TypeError, AttributeError) as exc:
             return failed(f"malformed alert or context: {exc!r}")
 
@@ -190,7 +222,7 @@ def make_hypothesis_agent(llm, search_fn=search_similar_incidents):
         return {
             "hypotheses": [h.model_dump() for h in hypotheses],
             "proposed_action": report.proposed_action.model_dump(),
-            "risk_tier": spec.risk_tier,
+            "risk_tier": spec.risk_tier,  # from the catalog, never from the LLM
             "status": "hypothesized",
             "errors": errors,
             "audit_log": audit_log,

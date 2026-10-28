@@ -10,6 +10,7 @@ from opssentinel.graph import build_graph
 from opssentinel.llm import get_llm
 from opssentinel.tools.knowledge_base import seed_knowledge_base
 from opssentinel.tools.remediation import SimulatedInfrastructure
+from opssentinel.tools.runbooks import search_runbooks, seed_runbooks
 
 ALERTS_PATH = Path(__file__).resolve().parents[2] / "data" / "alerts" / "sample_alerts.json"
 
@@ -63,8 +64,9 @@ def main() -> None:
 
     print(f"LLM: {settings.llm_provider} / {settings.active_model}")
     seed_knowledge_base()
+    seed_runbooks()
     infra = SimulatedInfrastructure()
-    graph = build_graph(get_llm(), infra)
+    graph = build_graph(get_llm(), infra, runbook_fn=search_runbooks)
 
     incident_id = f"INC-CLI-{args.alert}"
     config = {"configurable": {"thread_id": incident_id}}
