@@ -1,0 +1,79 @@
+[
+  {
+    "id": "RB-001",
+    "title": "Roll back a bad deployment",
+    "action": "rollback_deployment",
+    "applies_when": "error rate or latency rose sharply within minutes of a deployment of the affected service, and the errors point to code introduced by the new release",
+    "steps": [
+      "Confirm a deployment of the affected service happened shortly before the alert",
+      "Identify the previous known good version",
+      "Roll the service back to that version",
+      "Re-check the error rate after the rollback"
+    ],
+    "cautions": "Do not roll back if the release included a database migration that is not backward compatible; escalate instead. Needs human approval."
+  },
+  {
+    "id": "RB-002",
+    "title": "Clean up old logs on a full log volume",
+    "action": "cleanup_old_logs",
+    "applies_when": "disk usage on a log host is high and rising, log rotation is failing with no space left on device, and there was no recent deployment",
+    "steps": [
+      "Confirm the volume holds logs and that rotation has been failing",
+      "Delete only archived or rotated logs older than the retention period",
+      "Never delete the active log files",
+      "Re-check disk usage after the cleanup"
+    ],
+    "cautions": "Only paths under /var/log may be cleaned. If usage does not fall below 80 percent, escalate because old logs may not be the cause."
+  },
+  {
+    "id": "RB-003",
+    "title": "Restart a leaking service",
+    "action": "restart_service",
+    "applies_when": "memory use grows steadily for hours with no matching traffic increase, instances are killed for running out of memory, and latency spikes before each restart",
+    "steps": [
+      "Confirm the memory trend is steady growth and not a traffic spike",
+      "Restart the instances one at a time",
+      "Watch the error rate while instances come back",
+      "Open a follow-up task to fix the leak"
+    ],
+    "cautions": "A restart briefly reduces capacity, so avoid it at peak traffic without approval. A restart clears the symptom, not the cause. Needs human approval."
+  },
+  {
+    "id": "RB-004",
+    "title": "Scale up a saturated service",
+    "action": "scale_up_service",
+    "applies_when": "CPU is saturated on all instances, request volume is far above normal, latency is rising gradually, and there was no recent deployment",
+    "steps": [
+      "Confirm the load is real traffic and not an error loop",
+      "Add instances in small increments",
+      "Watch latency and the error rate after each increment",
+      "Lower the autoscaling thresholds afterwards"
+    ],
+    "cautions": "Never scale above the platform limit of 20 replicas. Scaling a service that is failing for another reason wastes money and hides the cause. Needs human approval."
+  },
+  {
+    "id": "RB-005",
+    "title": "Flush a stale cache",
+    "action": "clear_cache",
+    "applies_when": "customers see outdated data, there are no errors and no deployment, but a bulk data import or update ran recently",
+    "steps": [
+      "Confirm the cached entries predate the data import",
+      "Flush the cache for the affected service",
+      "Expect a short extra load on the database",
+      "Confirm fresh data is now served"
+    ],
+    "cautions": "Flushing during peak load can overload the database. There is no automated verification for this action, so a human must confirm the result."
+  },
+  {
+    "id": "RB-006",
+    "title": "Escalate to the on-call engineer",
+    "action": "escalate_to_human",
+    "applies_when": "the cause appears to be outside our systems such as a third-party outage, the evidence conflicts, confidence is low, or no other runbook fits",
+    "steps": [
+      "Page the on-call engineer with the incident summary and the evidence gathered",
+      "Do not change any infrastructure",
+      "Record what was checked so the engineer does not repeat it"
+    ],
+    "cautions": "Prefer escalation over a guess when confidence is low or a caution in another runbook applies."
+  }
+]
