@@ -9,6 +9,7 @@ from opssentinel.agents.execution import make_execution_agent
 from opssentinel.agents.hypothesis import make_hypothesis_agent
 from opssentinel.agents.ingestion import ingest_alert
 from opssentinel.agents.reporting import DEFAULT_REPORTS_DIR, make_reporting_agent
+from opssentinel.agents.review import review_gate
 from opssentinel.agents.verification import make_verification_agent
 from opssentinel.state import IncidentState
 from opssentinel.tools.knowledge_base import add_postmortem, search_similar_incidents
@@ -38,6 +39,11 @@ def route_after_execution(state: IncidentState) -> str:
     return "verifier" if state.get("status") == "verifying" else "reporting"
 
 
+def route_after_verification(state: IncidentState) -> str:
+    # Only a verified fix is worth a human review; anything else goes straight to the report.
+    return "review_gate" if state.get("status") == "resolved" else "reporting"
+
+
 def build_graph(
     llm,
     infra=None,
@@ -61,6 +67,7 @@ def build_graph(
         "verifier",
         make_verification_agent(infra, verify_attempts, verify_interval_seconds),
     )
+    builder.add_node("review_gate", review_gate)
     builder.add_node("reporting", make_reporting_agent(reports_dir, learn_fn))
 
     builder.add_edge(START, "ingestion")
@@ -89,7 +96,12 @@ def build_graph(
         route_after_execution,
         {"verifier": "verifier", "reporting": "reporting"},
     )
-    builder.add_edge("verifier", "reporting")
+    builder.add_conditional_edges(
+        "verifier",
+        route_after_verification,
+        {"review_gate": "review_gate", "reporting": "reporting"},
+    )
+    builder.add_edge("review_gate", "reporting")
     builder.add_edge("reporting", END)
 
     return builder.compile(checkpointer=checkpointer or MemorySaver())

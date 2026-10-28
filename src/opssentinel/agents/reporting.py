@@ -7,6 +7,7 @@ from opssentinel.tools.knowledge_base import add_postmortem
 
 AGENT_NAME = "reporting"
 DEFAULT_REPORTS_DIR = Path(__file__).resolve().parents[3] / "reports"
+LEARNABLE_REVIEWS = ("confirmed", "corrected")
 
 OUTCOME_TEXT = {
     "resolved": "Resolved: the fix was applied and verified.",
@@ -32,6 +33,7 @@ def build_report(state: IncidentState) -> str:
     proposal = state.get("proposed_action") or {}
     result = state.get("execution_result") or {}
     verification = state.get("verification") or {}
+    review = state.get("review") or {}
     hypotheses = state.get("hypotheses") or []
 
     lines = [
@@ -72,6 +74,16 @@ def build_report(state: IncidentState) -> str:
 
     lines += ["", "## Verification", verification.get("message") or "No verification was performed."]
 
+    lines += ["", "## Post-incident review"]
+    if review:
+        lines.append(f"- Decision: {review.get('decision')} by {review.get('reviewer', 'unknown')}")
+        if review.get("corrected_root_cause"):
+            lines.append(f"- Corrected root cause: {review['corrected_root_cause']}")
+        if review.get("comment"):
+            lines.append(f"- Comment: {review['comment']}")
+    else:
+        lines.append("No human review was performed.")
+
     lines += ["", "## Timeline"]
     lines += [
         f"- {e.get('timestamp')} [{e.get('agent')}] {e.get('action')}: {e.get('detail')}"
@@ -84,12 +96,16 @@ def build_report(state: IncidentState) -> str:
 
 
 def build_postmortem_record(state: IncidentState) -> dict | None:
-    """Turn a verified, resolved incident into a knowledge-base entry.
+    """Turn a verified, human-reviewed incident into a knowledge-base entry.
 
-    Anything not resolved is never learned, so a fix that did not work cannot
-    be recommended to the next incident.
+    Anything not resolved, or not confirmed or corrected by a person, is never
+    learned, so an unreviewed diagnosis or a fix that did not work cannot be
+    recommended to the next incident.
     """
     if state.get("status") != "resolved":
+        return None
+    review = state.get("review") or {}
+    if review.get("decision") not in LEARNABLE_REVIEWS:
         return None
     alert = state.get("alert") or {}
     hypotheses = state.get("hypotheses") or []
@@ -100,15 +116,17 @@ def build_postmortem_record(state: IncidentState) -> dict | None:
     approval = state.get("approval") or {}
     approver = approval.get("reviewer", "unknown") if approval.get("decision") == "approved" else "auto (low risk)"
     signals = (state.get("context") or {}).get("signals", [])
+    root_cause = review.get("corrected_root_cause") or hypotheses[0].get("cause", "unknown")
     return {
         "id": f"PM-{state.get('incident_id', 'unknown')}",
         "title": f"{alert.get('name')}: {alert.get('summary')}",
         "service": alert.get("service") or alert.get("host") or "unknown",
         "symptoms": "; ".join(signals) or str(alert.get("summary")),
-        "root_cause": hypotheses[0].get("cause", "unknown"),
+        "root_cause": root_cause,
         "remediation_action": proposal["action"],
         "resolution": f"{(state.get('execution_result') or {}).get('message')}. "
-        f"Verified: {(state.get('verification') or {}).get('message')}.",
+        f"Verified: {(state.get('verification') or {}).get('message')}. "
+        f"Reviewed by {review.get('reviewer', 'unknown')} ({review['decision']}).",
         "source": "incident",
         "approved_by": approver,
     }

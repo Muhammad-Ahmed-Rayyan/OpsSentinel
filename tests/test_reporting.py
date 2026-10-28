@@ -47,6 +47,12 @@ def resolved_state():
             "verified": True,
             "message": "error_rate_percent for checkout-api is 0.5 (limit 5.0) after 1 check(s)",
         },
+        "review": {
+            "decision": "confirmed",
+            "reviewer": "tester",
+            "comment": "diagnosis was right",
+            "corrected_root_cause": "",
+        },
         "audit_log": [
             {
                 "timestamp": "2026-10-15T09:13:00+00:00",
@@ -65,7 +71,8 @@ def test_report_contains_the_key_facts_and_is_saved(tmp_path):
     report = update["report"]
     for expected in [
         "INC-R1", "HighErrorRate", "Null handling bug", "rollback_deployment",
-        "approved by tester", "0.5", "hypotheses_ranked",
+        "approved by tester", "0.5", "confirmed by tester", "diagnosis was right",
+        "hypotheses_ranked",
     ]:
         assert expected in report
     saved = Path(update["report_path"])
@@ -73,7 +80,7 @@ def test_report_contains_the_key_facts_and_is_saved(tmp_path):
     assert saved.read_text(encoding="utf-8") == report
 
 
-def test_resolved_incident_is_learned(tmp_path):
+def test_confirmed_incident_is_learned(tmp_path):
     learned = []
     make_reporting_agent(tmp_path, learn_fn=learned.append)(resolved_state())
 
@@ -85,6 +92,44 @@ def test_resolved_incident_is_learned(tmp_path):
     assert record["approved_by"] == "tester"
     assert record["source"] == "incident"
     assert "http_5xx_rate_percent" in record["symptoms"]
+    assert "Reviewed by tester (confirmed)" in record["resolution"]
+
+
+def test_corrected_root_cause_is_what_gets_learned(tmp_path):
+    learned = []
+    state = resolved_state()
+    state["review"] = {
+        "decision": "corrected",
+        "reviewer": "tester",
+        "comment": "",
+        "corrected_root_cause": "Bad feature flag shipped with v2.14.0",
+    }
+    update = make_reporting_agent(tmp_path, learn_fn=learned.append)(state)
+
+    assert learned[0]["root_cause"] == "Bad feature flag shipped with v2.14.0"
+    assert "Corrected root cause: Bad feature flag shipped with v2.14.0" in update["report"]
+
+
+@pytest.mark.parametrize("decision", ["skipped", "rejected"])
+def test_unconfirmed_review_is_reported_but_not_learned(tmp_path, decision):
+    learned = []
+    state = resolved_state()
+    state["review"] = {"decision": decision, "reviewer": "tester", "comment": "", "corrected_root_cause": ""}
+    update = make_reporting_agent(tmp_path, learn_fn=learned.append)(state)
+
+    assert learned == []
+    assert (tmp_path / "INC-R1.md").exists()
+    assert f"{decision} by tester" in update["report"]
+
+
+def test_incident_without_any_review_is_not_learned(tmp_path):
+    learned = []
+    state = resolved_state()
+    del state["review"]
+    update = make_reporting_agent(tmp_path, learn_fn=learned.append)(state)
+
+    assert learned == []
+    assert "No human review was performed." in update["report"]
 
 
 @pytest.mark.parametrize("status", ["rejected", "escalated", "failed"])

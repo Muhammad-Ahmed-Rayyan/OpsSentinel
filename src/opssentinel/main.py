@@ -14,11 +14,16 @@ from opssentinel.tools.remediation import SimulatedInfrastructure
 ALERTS_PATH = Path(__file__).resolve().parents[2] / "data" / "alerts" / "sample_alerts.json"
 
 
-def ask_human(request: dict) -> dict:
+def _show(title: str, request: dict) -> None:
     print("\n" + "=" * 70)
-    print("HUMAN APPROVAL REQUIRED")
+    print(title)
     for key, value in request.items():
-        print(f"  {key}: {value}")
+        if key != "kind":
+            print(f"  {key}: {value}")
+
+
+def ask_approval(request: dict) -> dict:
+    _show("HUMAN APPROVAL REQUIRED", request)
     answer = input("\nApprove this action? [y/N]: ").strip().lower()
     comment = input("Comment (optional): ").strip()
     return {
@@ -26,6 +31,26 @@ def ask_human(request: dict) -> dict:
         "reviewer": getpass.getuser(),
         "comment": comment,
     }
+
+
+def ask_review(request: dict) -> dict:
+    _show("POST-INCIDENT REVIEW", request)
+    answer = input(
+        "\nWas the diagnosis correct? [y = yes, n = no, c = correct it, s = skip]: "
+    ).strip().lower()
+    decision = {"y": "confirmed", "n": "rejected", "c": "corrected"}.get(answer, "skipped")
+    corrected = input("Correct root cause: ").strip() if decision == "corrected" else ""
+    comment = input("Comment (optional): ").strip()
+    return {
+        "decision": decision,
+        "reviewer": getpass.getuser(),
+        "comment": comment,
+        "corrected_root_cause": corrected,
+    }
+
+
+def ask_human(request: dict) -> dict:
+    return ask_review(request) if request.get("kind") == "review" else ask_approval(request)
 
 
 def main() -> None:
@@ -60,6 +85,7 @@ def main() -> None:
     print(f"{incident_id} finished with status: {result['status']}")
     print("Execution:   ", json.dumps(result.get("execution_result")))
     print("Verification:", json.dumps(result.get("verification")))
+    print("Review:      ", json.dumps(result.get("review")))
     print("Errors:      ", result["errors"])
     print("Report saved:", result.get("report_path", "(could not be saved)"))
     print("\n" + result["report"])
