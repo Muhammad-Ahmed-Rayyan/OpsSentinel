@@ -7,13 +7,23 @@ from opssentinel.agents.approval import approval_gate
 from opssentinel.agents.correlation import correlate_incident
 from opssentinel.agents.execution import make_execution_agent
 from opssentinel.agents.hypothesis import make_hypothesis_agent
-from opssentinel.agents.ingestion import ingest_alert
+from opssentinel.agents.ingestion import make_ingestion_agent
 from opssentinel.agents.reporting import DEFAULT_REPORTS_DIR, make_reporting_agent
 from opssentinel.agents.review import review_gate
 from opssentinel.agents.verification import make_verification_agent
+from opssentinel.dedup import AlertDeduplicator
 from opssentinel.state import IncidentState
 from opssentinel.tools.knowledge_base import add_postmortem, search_similar_incidents
 from opssentinel.tools.remediation import SimulatedInfrastructure
+
+
+def route_after_ingestion(state: IncidentState) -> str:
+    status = state.get("status")
+    if status == "failed":
+        return "reporting"
+    if status == "suppressed":
+        return END
+    return "correlation"
 
 
 def _continue_unless_failed(next_node: str):
@@ -24,7 +34,6 @@ def _continue_unless_failed(next_node: str):
 
 
 def route_after_hypothesis(state: IncidentState) -> str:
-    # "escalated" (LLM failed) still goes to execution so the human gets paged.
     if state.get("status") not in ("hypothesized", "escalated"):
         return "reporting"
     return "approval_gate" if state.get("risk_tier") == "high" else "execution"
@@ -40,8 +49,16 @@ def route_after_execution(state: IncidentState) -> str:
 
 
 def route_after_verification(state: IncidentState) -> str:
-    # Only a verified fix is worth a human review; anything else goes straight to the report.
     return "review_gate" if state.get("status") == "resolved" else "reporting"
+
+
+def make_close_node(deduplicator: AlertDeduplicator):
+    def close_incident(state: IncidentState) -> dict:
+        """Release the incident so a later repeat of the same alert opens a fresh one."""
+        deduplicator.release(str(state.get("incident_id", "unknown")))
+        return {"status": state.get("status", "unknown")}  # unchanged; a node must return an update
+
+    return close_incident
 
 
 def build_graph(
@@ -53,12 +70,15 @@ def build_graph(
     learn_fn=add_postmortem,
     verify_attempts: int = 3,
     verify_interval_seconds: float = 0.0,
+    dedup_window_minutes: int = 30,
+    min_severity: str = "medium",
 ):
     """Compile the incident-response graph. A checkpointer is required for interrupts."""
     infra = infra if infra is not None else SimulatedInfrastructure()
+    deduplicator = AlertDeduplicator(dedup_window_minutes)
 
     builder = StateGraph(IncidentState)
-    builder.add_node("ingestion", ingest_alert)
+    builder.add_node("ingestion", make_ingestion_agent(deduplicator, min_severity))
     builder.add_node("correlation", correlate_incident)
     builder.add_node("hypothesis", make_hypothesis_agent(llm, search_fn))
     builder.add_node("approval_gate", approval_gate)
@@ -69,12 +89,13 @@ def build_graph(
     )
     builder.add_node("review_gate", review_gate)
     builder.add_node("reporting", make_reporting_agent(reports_dir, learn_fn))
+    builder.add_node("close_incident", make_close_node(deduplicator))
 
     builder.add_edge(START, "ingestion")
     builder.add_conditional_edges(
         "ingestion",
-        _continue_unless_failed("correlation"),
-        {"correlation": "correlation", "reporting": "reporting"},
+        route_after_ingestion,
+        {"correlation": "correlation", "reporting": "reporting", END: END},
     )
     builder.add_conditional_edges(
         "correlation",
@@ -102,6 +123,7 @@ def build_graph(
         {"review_gate": "review_gate", "reporting": "reporting"},
     )
     builder.add_edge("review_gate", "reporting")
-    builder.add_edge("reporting", END)
+    builder.add_edge("reporting", "close_incident")
+    builder.add_edge("close_incident", END)
 
     return builder.compile(checkpointer=checkpointer or MemorySaver())
