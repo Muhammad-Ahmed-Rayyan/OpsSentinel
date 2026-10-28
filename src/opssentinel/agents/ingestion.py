@@ -3,10 +3,12 @@ from datetime import datetime, timezone
 from pydantic import ValidationError
 
 from opssentinel.audit import audit_entry
+from opssentinel.dedup import AlertDeduplicator
 from opssentinel.schemas import NormalizedAlert
 from opssentinel.state import IncidentState
 
 AGENT_NAME = "alert_ingestion"
+SEVERITY_ORDER = {"low": 0, "medium": 1, "high": 2, "critical": 3}
 
 PROMETHEUS_SEVERITY = {
     "critical": "critical",
@@ -64,32 +66,67 @@ def normalize_alert(raw_alert: dict) -> NormalizedAlert:
     return parser(raw_alert["payload"])
 
 
-def ingest_alert(state: IncidentState) -> dict:
-    """LangGraph node: fill state['alert'] from state['raw_alert'].
+def make_ingestion_agent(
+    deduplicator: AlertDeduplicator | None = None, min_severity: str = "low"
+):
+    """Build the LangGraph node.
 
-    Malformed input is recorded in state['errors'] instead of raising, so the
-    graph can route to escalation rather than crash.
+    min_severity: alerts below this severity are suppressed as noise.
+    deduplicator: suppresses repeats of an alert whose incident is still open.
     """
-    audit_log = list(state.get("audit_log", []))
-    errors = list(state.get("errors", []))
-
-    try:
-        alert = normalize_alert(state["raw_alert"])
-    except (KeyError, ValueError, TypeError, ValidationError) as exc:
-        errors.append({"agent": AGENT_NAME, "error": f"{type(exc).__name__}: {exc}"})
-        audit_log.append(audit_entry(AGENT_NAME, "ingestion_failed", str(exc)))
-        return {"status": "failed", "errors": errors, "audit_log": audit_log}
-
-    audit_log.append(
-        audit_entry(
-            AGENT_NAME,
-            "alert_normalized",
-            f"{alert.source} alert '{alert.name}' ({alert.severity})",
+    if min_severity not in SEVERITY_ORDER:
+        raise ValueError(
+            f"min_severity must be one of {sorted(SEVERITY_ORDER)}, got '{min_severity}'"
         )
-    )
-    return {
-        "alert": alert.model_dump(mode="json"),
-        "status": "ingested",
-        "errors": errors,
-        "audit_log": audit_log,
-    }
+
+    def ingest(state: IncidentState) -> dict:
+        """Fill state['alert'] from state['raw_alert'].
+
+        Malformed input is recorded in state['errors'] instead of raising, so the
+        graph can route to reporting rather than crash.
+        """
+        audit_log = list(state.get("audit_log", []))
+        errors = list(state.get("errors", []))
+
+        try:
+            alert = normalize_alert(state["raw_alert"])
+        except (KeyError, ValueError, TypeError, ValidationError) as exc:
+            errors.append({"agent": AGENT_NAME, "error": f"{type(exc).__name__}: {exc}"})
+            audit_log.append(audit_entry(AGENT_NAME, "ingestion_failed", str(exc)))
+            return {"status": "failed", "errors": errors, "audit_log": audit_log}
+
+        def suppress(reason: str) -> dict:
+            audit_log.append(audit_entry(AGENT_NAME, "alert_suppressed", reason))
+            return {
+                "alert": alert.model_dump(mode="json"),
+                "status": "suppressed",
+                "errors": errors,
+                "audit_log": audit_log,
+            }
+
+        if SEVERITY_ORDER[alert.severity] < SEVERITY_ORDER[min_severity]:
+            return suppress(
+                f"noise: severity '{alert.severity}' is below the minimum '{min_severity}'"
+            )
+        if deduplicator is not None:
+            original = deduplicator.check(alert, str(state.get("incident_id", "unknown")))
+            if original is not None:
+                return suppress(f"duplicate of open incident {original}")
+
+        audit_log.append(
+            audit_entry(
+                AGENT_NAME,
+                "alert_normalized",
+                f"{alert.source} alert '{alert.name}' ({alert.severity})",
+            )
+        )
+        return {
+            "alert": alert.model_dump(mode="json"),
+            "status": "ingested",
+            "errors": errors,
+            "audit_log": audit_log,
+        }
+
+    return ingest
+
+ingest_alert = make_ingestion_agent()

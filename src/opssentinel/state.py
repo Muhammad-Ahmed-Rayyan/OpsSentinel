@@ -2,6 +2,7 @@ from typing import Literal, TypedDict
 
 Status = Literal[
     "ingested",
+    "suppressed",
     "correlated",
     "hypothesized",
     "awaiting_approval",
