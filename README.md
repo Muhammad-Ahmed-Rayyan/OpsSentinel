@@ -1,69 +1,83 @@
-# OpsSentinel
+<div align="center">
 
-A multi-agent incident response and on-call triage system built with LangGraph. It ingests monitoring alerts, correlates logs, metrics and deployments, proposes a root cause and ranked fixes, asks a human before any high-risk action, executes, verifies the result, asks a human to review the diagnosis, writes a postmortem, and learns only from fixes that worked and were confirmed.
+# 🚨 OpsSentinel
+
+*Multi-Agent Incident Response & On-Call Triage with LangGraph*
+
+![Last Commit](https://img.shields.io/github/last-commit/Muhammad-Ahmed-Rayyan/OpsSentinel)
+![Python](https://img.shields.io/badge/Python-100%25-blue?logo=python)
+![languages](https://img.shields.io/github/languages/count/Muhammad-Ahmed-Rayyan/OpsSentinel)
+
+<br>
+
+Built with the tools and technologies:  
+![Python](https://img.shields.io/badge/python-3670A0?style=for-the-badge&logo=python&logoColor=ffdd54)
+![LangGraph](https://img.shields.io/badge/LangGraph-1C3C3C?style=for-the-badge&logo=langchain&logoColor=white)
+![ChromaDB](https://img.shields.io/badge/ChromaDB-FF6446?style=for-the-badge&logoColor=white)
+![Groq](https://img.shields.io/badge/Groq-F55036?style=for-the-badge&logoColor=white)
+![OpenRouter](https://img.shields.io/badge/OpenRouter-6467F2?style=for-the-badge&logoColor=white)
+![Slack](https://img.shields.io/badge/Slack-4A154B?style=for-the-badge&logo=slack&logoColor=white)
+![Pytest](https://img.shields.io/badge/pytest-0A9EDC?style=for-the-badge&logo=pytest&logoColor=white)
+
+</div>
+
+---
+
+## 🧠 Project Summary
+
+**OpsSentinel** is a multi-agent incident response and on-call triage system built with **LangGraph**. It ingests monitoring alerts, correlates logs, metrics and deployments, proposes a root cause with ranked fixes, asks a human before any high-risk action, executes, verifies the result, asks a human to review the diagnosis, writes a postmortem, and learns only from fixes that worked and were confirmed.
 
 It is a backend workflow, not a chatbot. Infrastructure is simulated, so everything runs safely on a laptop.
 
-## How it works
+---
+
+## 🚀 Features
 
 Eight stages share one typed incident state:
 
-1. **Ingestion** normalizes alerts from different monitoring tools and drops noise and duplicates of an open incident
-2. **Correlation** gathers related logs, metrics and recent deployments
-3. **Hypothesis** retrieves similar past incidents and runbooks, then uses an LLM to rank causes and propose a best action plus up to two alternatives from a fixed catalog
-4. **Approval Gate** pauses the graph until a human approves the proposal, chooses an alternative, or rejects, for high-risk actions
-5. **Execution** applies the action under policy
-6. **Verification** re-reads metrics to confirm the fix worked
-7. **Review Gate** asks a human to confirm, correct or skip the diagnosis of a verified fix
-8. **Reporting** writes a postmortem and feeds confirmed or corrected outcomes back into the knowledge base
+- 📥 **Ingestion**  
+  Normalizes alerts from different monitoring tools and drops noise and duplicates of an open incident.
 
-Notification nodes tell a human when an approval or review is waiting and when an incident is escalated. Low-risk actions run automatically. Anything that fails, is rejected or cannot be verified is escalated, and every incident that opens ends with a report.
+- 🔗 **Correlation**  
+  Gathers related logs, metrics and recent deployments.
 
-Documentation:
+- 🧠 **Hypothesis**  
+  Retrieves similar past incidents and runbooks, then uses an LLM to rank causes and propose a best action plus up to two alternatives from a fixed catalog.
+
+- 🛑 **Approval Gate**  
+  Pauses the graph until a human approves the proposal, chooses an alternative, or rejects, for high-risk actions.
+
+- ⚙️ **Execution**  
+  Applies the action under policy. Low-risk actions run automatically.
+
+- ✅ **Verification**  
+  Re-reads metrics to confirm the fix worked.
+
+- 🧑‍💻 **Review Gate**  
+  Asks a human to confirm, correct or skip the diagnosis of a verified fix.
+
+- 📝 **Reporting**  
+  Writes a postmortem and feeds confirmed or corrected outcomes back into the knowledge base.
+
+- 🔔 **Notifications & Escalation**  
+  Notification nodes tell a human when an approval or review is waiting and when an incident is escalated. Anything that fails, is rejected or cannot be verified is escalated, and every incident that opens ends with a report.
+
+- 🧪 **Safe, Cost-Free Testing**  
+  Agent and graph tests use a fake LLM and a recording notifier, so the suite costs no API quota.
+
+### 📚 Documentation
+
 - [Architecture and diagrams](docs/ARCHITECTURE.md)
 - [Design rationale](docs/DESIGN_RATIONALE.md)
 - [Failure handling](docs/FAILURE_HANDLING.md)
 - [Alignment with the approved proposal](docs/PROPOSAL_ALIGNMENT.md)
 - [Example incident reports and notifications](docs/examples)
 
-## Quick start (Windows)
+---
 
-```
-git clone <repo-url>
-cd OpsSentinel
-python -m venv venv
-venv\Scripts\activate
-pip install -e ".[dev]"
-copy .env.example .env
-```
+## 🗃️ Project Structure
 
-Edit `.env`: choose `LLM_PROVIDER` (`groq` or `openrouter`), set that provider's API key, and set its model name. Model names change over time, so check the provider's current list if you get a "model not found" error. `SLACK_WEBHOOK_URL` is optional; leave it empty to write notifications to the `notifications` folder only.
-
-Check the connection, then run an incident:
-
-```
-python scripts\check_llm.py
-python -m opssentinel.main --alert 0
-python -m opssentinel.main --alert 1
-```
-
-- `--alert 0`: checkout 5xx spike after a deployment. High risk, so you are asked to approve (or choose an alternative), then asked to review the diagnosis.
-- `--alert 1`: disk almost full. Low risk, so it is fixed automatically, then you review the diagnosis.
-
-The first run downloads a local embedding model (about 80 MB). Reports are written to `reports/` and notifications to `notifications/`. To see duplicate and noise filtering without spending any LLM quota, run `python scripts\demo_filtering.py`.
-
-## Tests
-
-```
-pytest
-pytest -m "not integration"
-```
-
-The second command skips tests that need the embedding model. Agent and graph tests use a fake LLM and a recording notifier, so the suite costs no API quota.
-
-## Project structure
-
-```
+```bash
 OpsSentinel/
 ├── data/                               # Sample telemetry, alerts, and seed data for local simulation
 │   ├── alerts/
@@ -150,15 +164,107 @@ OpsSentinel/
 └── requirements.txt                    # Project runtime and development dependencies
 ```
 
-## Known limitations
+---
 
-- Infrastructure and telemetry are simulated. Real use needs adapters for the monitoring, deployment and infrastructure APIs behind the tool layer.
-- The checkpointer and the duplicate tracker are in memory, so a pending approval or review, and the list of open incidents, are lost if the process exits. A persistent checkpointer (SQLite or Postgres) fixes this.
-- There is no approval timeout or re-paging if nobody responds.
-- It handles one incident per command-line run. Duplicate filtering is shown by tests and a demo script, not by the CLI.
-- Learning trusts verified outcomes that a human confirmed or corrected, with no pruning of old entries. Runbooks are static and do not learn.
-- The review lets the engineer confirm, correct the root cause or comment, but not edit the full report text.
-- The Slack-compatible webhook is tested with a stand-in, not against a live workspace.
-- Risk tiers are static. They do not yet consider time of day, blast radius or recent incident history.
-- Free-tier LLMs can be unreliable at strict JSON. The agent retries once and then escalates, and a stronger model is more dependable.
-- REST wrappers around the tools and MCP integration are not implemented.
+## 🔧 Setup & Installation
+
+> Make sure Python and Git are installed on your system.
+
+```bash
+# Clone the repo
+git clone https://github.com/Muhammad-Ahmed-Rayyan/OpsSentinel.git
+cd OpsSentinel
+
+# Create and activate a virtual environment
+python -m venv venv
+venv\Scripts\activate
+
+# Install the project with dev dependencies
+pip install -e ".[dev]"
+
+# Create your environment file
+copy .env.example .env
+```
+
+> The first run downloads a local embedding model (about 80 MB).
+
+---
+
+## 🔑 API Configuration
+
+Edit the `.env` file you just created:
+
+```.env
+LLM_PROVIDER="groq"                      # groq or openrouter
+YOUR-PROVIDER-API-KEY="YOUR-API-KEY"     # API key for the chosen provider (see .env.example for the exact variable name)
+YOUR-PROVIDER-MODEL="YOUR-MODEL-NAME"    # Model name for the chosen provider (see .env.example for the exact variable name)
+SLACK_WEBHOOK_URL=""                     # Optional: leave empty to write notifications to the notifications folder only
+```
+
+> Model names change over time. If you get a "model not found" error, check the provider's current model list.
+
+---
+
+## ⚙️ Run the Project
+
+Check the LLM connection first:
+
+```bash
+python scripts\check_llm.py
+```
+
+Then run an incident:
+
+```bash
+# Checkout 5xx spike after a deployment (high risk: approval + diagnosis review)
+python -m opssentinel.main --alert 0
+
+# Disk almost full (low risk: auto-fixed, then diagnosis review)
+python -m opssentinel.main --alert 1
+```
+
+- 🔴 **`--alert 0`:** High risk, so you are asked to approve (or choose an alternative), then asked to review the diagnosis.
+- 🟢 **`--alert 1`:** Low risk, so it is fixed automatically, then you review the diagnosis.
+
+Reports are written to `reports/` and notifications to `notifications/`.
+
+To see duplicate and noise filtering without spending any LLM quota:
+
+```bash
+python scripts\demo_filtering.py
+```
+
+---
+
+## 🧪 Tests
+
+```bash
+# Run the full suite
+pytest
+
+# Skip tests that need the embedding model
+pytest -m "not integration"
+```
+
+---
+
+## ⚠️ Known Limitations
+
+- 🧩 Infrastructure and telemetry are simulated. Real use needs adapters for the monitoring, deployment and infrastructure APIs behind the tool layer.
+- 💾 The checkpointer and duplicate tracker are in memory, so pending approvals/reviews and open incidents are lost if the process exits. A persistent checkpointer (SQLite or Postgres) fixes this.
+- ⏳ There is no approval timeout or re-paging if nobody responds.
+- 1️⃣ It handles one incident per command-line run. Duplicate filtering is shown by tests and a demo script, not by the CLI.
+- 📖 Learning trusts verified outcomes that a human confirmed or corrected, with no pruning of old entries. Runbooks are static and do not learn.
+- ✏️ The review lets the engineer confirm, correct the root cause or comment, but not edit the full report text.
+- 💬 The Slack-compatible webhook is tested with a stand-in, not against a live workspace.
+- 📊 Risk tiers are static. They do not yet consider time of day, blast radius or recent incident history.
+- 🤖 Free-tier LLMs can be unreliable at strict JSON. The agent retries once and then escalates, and a stronger model is more dependable.
+- 🔌 REST wrappers around the tools and MCP integration are not implemented.
+
+---
+
+<div align="center">
+
+⭐ Found this project useful? Give it a star on GitHub!
+
+</div>
