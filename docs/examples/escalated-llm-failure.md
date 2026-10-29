@@ -17,16 +17,21 @@ No hypothesis was produced.
 - Risk tier: low
 - Rationale: Automated analysis failed: LLM call failed: AuthenticationError: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
 - Approval: not required (low risk)
-- Result: on-call engineer paged with the incident summary
+- Result: escalation recorded for the on-call engineer
 
 ## Verification
 No verification was performed.
 
+## Post-incident review
+No human review was performed.
+
 ## Timeline
-- 2026-10-27T21:42:26.923224+00:00 [alert_ingestion] alert_normalized: prometheus alert 'HighErrorRate' (critical)
-- 2026-10-27T21:42:26.923224+00:00 [correlation] context_built: 5 logs, 6 metrics, 1 deployments, 3 signals; unavailable: none
-- 2026-10-27T21:42:27.407051+00:00 [hypothesis] escalated: LLM call failed: AuthenticationError: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
-- 2026-10-27T21:42:27.409083+00:00 [execution] escalated: on-call engineer paged with the incident summary
+- 2026-10-29T09:31:40.399980+00:00 [alert_ingestion] alert_normalized: prometheus alert 'HighErrorRate' (critical)
+- 2026-10-29T09:31:40.399980+00:00 [correlation] context_built: 5 logs, 6 metrics, 1 deployments, 3 signals; unavailable: none
+- 2026-10-29T09:31:40.942274+00:00 [hypothesis] knowledge_retrieved: 3 past incidents, 2 runbooks (RB-001, RB-005)
+- 2026-10-29T09:31:41.057430+00:00 [hypothesis] escalated: LLM call failed: AuthenticationError: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
+- 2026-10-29T09:31:41.057430+00:00 [execution] escalated: escalation recorded for the on-call engineer
+- 2026-10-29T09:31:41.057430+00:00 [notifier] human_notified: escalation notification sent
 
 ## Issues
 - [hypothesis] LLM call failed: AuthenticationError: Error code: 401 - {'error': {'message': 'Invalid API Key', 'type': 'invalid_request_error', 'code': 'invalid_api_key'}}
