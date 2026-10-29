@@ -16,6 +16,8 @@ class Settings:
     groq_api_key: str = os.getenv("GROQ_API_KEY", "")
     groq_model: str = os.getenv("GROQ_MODEL", "")
 
+    slack_webhook_url: str = os.getenv("SLACK_WEBHOOK_URL", "").strip()
+
     @property
     def active_model(self) -> str:
         """Model name for the currently selected provider."""
