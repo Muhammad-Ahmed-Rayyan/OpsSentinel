@@ -30,17 +30,21 @@ def _show(title: str, request: dict) -> None:
             print(f"  {key}: {value}")
 
 
-def ask_approval(request: dict) -> dict:
-    _show("HUMAN APPROVAL REQUIRED", request)
-    options = 1 + len(request.get("alternatives") or [])
-    if options > 1:
-        prompt = (
+def _approval_prompt(options: int) -> str:
+    if options > 2:
+        return (
             f"\nApprove? [y = option 1 (proposed), 2-{options} = approve that alternative, "
             "N = reject]: "
         )
-    else:
-        prompt = "\nApprove this action? [y/N]: "
-    answer = input(prompt).strip().lower()
+    if options == 2:
+        return "\nApprove? [y = option 1 (proposed), 2 = approve the alternative, N = reject]: "
+    return "\nApprove this action? [y/N]: "
+
+
+def ask_approval(request: dict) -> dict:
+    _show("HUMAN APPROVAL REQUIRED", request)
+    options = 1 + len(request.get("alternatives") or [])
+    answer = input(_approval_prompt(options)).strip().lower()
     comment = input("Comment (optional): ").strip()
 
     option = int(answer) if answer.isdigit() else 1

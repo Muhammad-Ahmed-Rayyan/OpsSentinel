@@ -5,7 +5,6 @@ Status = Literal[
     "suppressed",
     "correlated",
     "hypothesized",
-    "awaiting_approval",
     "executing",
     "verifying",
     "resolved",
