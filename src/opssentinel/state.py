@@ -21,7 +21,8 @@ class IncidentState(TypedDict, total=False):
     alert: dict              # normalized alert (Ingestion Agent output)
     context: dict            # correlated logs, metrics, deployments (Correlation Agent)
     hypotheses: list         # ranked root causes (Hypothesis Agent)
-    proposed_action: dict    # chosen remediation + parameters
+    proposed_action: dict    # best remediation + parameters
+    alternatives: list       # other ranked remediation options, best first
     risk_tier: str           # "low" or "high"
     approval: dict           # human decision on a high-risk action
     execution_result: dict   # output of the remediation tool

@@ -21,6 +21,11 @@ def _approval_text(state: IncidentState) -> str:
     approval = state.get("approval") or {}
     if approval:
         text = f"{approval.get('decision')} by {approval.get('reviewer', 'unknown')}"
+        if approval.get("original_action"):
+            text += (
+                f" (chose option {approval.get('option')} "
+                f"instead of {approval['original_action']})"
+            )
         return text + (f" ({approval['comment']})" if approval.get("comment") else "")
     if state.get("risk_tier") == "low":
         return "not required (low risk)"
@@ -35,6 +40,7 @@ def build_report(state: IncidentState) -> str:
     verification = state.get("verification") or {}
     review = state.get("review") or {}
     hypotheses = state.get("hypotheses") or []
+    alternatives = state.get("alternatives") or []
 
     lines = [
         f"# Incident {state.get('incident_id', 'unknown')}: {alert.get('name') or 'Unclassified'}",
@@ -67,6 +73,13 @@ def build_report(state: IncidentState) -> str:
             f"- Rationale: {proposal.get('rationale', 'n/a')}",
             f"- Approval: {_approval_text(state)}",
         ]
+        if alternatives:
+            lines.append("- Alternatives considered:")
+            lines += [
+                f"  - {alt.get('action')} {alt.get('parameters', {})} "
+                f"[{alt.get('risk_tier', '?')} risk]: {alt.get('rationale', '')}"
+                for alt in alternatives
+            ]
         if result:
             lines.append(f"- Result: {result.get('message')}")
     else:

@@ -8,6 +8,7 @@ from langgraph.types import Command
 from opssentinel.config import settings
 from opssentinel.graph import build_graph
 from opssentinel.llm import get_llm
+from opssentinel.notifier import DEFAULT_OUTBOX_DIR, build_notifier
 from opssentinel.tools.knowledge_base import seed_knowledge_base
 from opssentinel.tools.remediation import SimulatedInfrastructure
 from opssentinel.tools.runbooks import search_runbooks, seed_runbooks
@@ -19,16 +20,34 @@ def _show(title: str, request: dict) -> None:
     print("\n" + "=" * 70)
     print(title)
     for key, value in request.items():
-        if key != "kind":
+        if key == "kind":
+            continue
+        if isinstance(value, list):
+            print(f"  {key}:" + ("" if value else " none"))
+            for item in value:
+                print(f"    - {item}")
+        else:
             print(f"  {key}: {value}")
 
 
 def ask_approval(request: dict) -> dict:
     _show("HUMAN APPROVAL REQUIRED", request)
-    answer = input("\nApprove this action? [y/N]: ").strip().lower()
+    options = 1 + len(request.get("alternatives") or [])
+    if options > 1:
+        prompt = (
+            f"\nApprove? [y = option 1 (proposed), 2-{options} = approve that alternative, "
+            "N = reject]: "
+        )
+    else:
+        prompt = "\nApprove this action? [y/N]: "
+    answer = input(prompt).strip().lower()
     comment = input("Comment (optional): ").strip()
+
+    option = int(answer) if answer.isdigit() else 1
+    approved = answer in ("y", "yes") or (answer.isdigit() and 1 <= option <= options)
     return {
-        "decision": "approved" if answer in ("y", "yes") else "rejected",
+        "decision": "approved" if approved else "rejected",
+        "option": option,
         "reviewer": getpass.getuser(),
         "comment": comment,
     }
@@ -66,7 +85,8 @@ def main() -> None:
     seed_knowledge_base()
     seed_runbooks()
     infra = SimulatedInfrastructure()
-    graph = build_graph(get_llm(), infra, runbook_fn=search_runbooks)
+    notifier = build_notifier(DEFAULT_OUTBOX_DIR, settings.slack_webhook_url)
+    graph = build_graph(get_llm(), infra, runbook_fn=search_runbooks, notifier=notifier)
 
     incident_id = f"INC-CLI-{args.alert}"
     config = {"configurable": {"thread_id": incident_id}}
@@ -90,6 +110,7 @@ def main() -> None:
     print("Review:      ", json.dumps(result.get("review")))
     print("Errors:      ", result["errors"])
     print("Report saved:", result.get("report_path", "(could not be saved)"))
+    print("Notifications:", DEFAULT_OUTBOX_DIR)
     print("\n" + result["report"])
     print("Infrastructure after:", json.dumps(infra.state))
 

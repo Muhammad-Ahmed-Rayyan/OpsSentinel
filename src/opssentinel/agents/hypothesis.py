@@ -4,28 +4,32 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from opssentinel.actions import ACTION_CATALOG, ActionSpec, describe_catalog
 from opssentinel.audit import audit_entry
-from opssentinel.schemas import HypothesisReport
+from opssentinel.schemas import HypothesisReport, RemediationProposal
 from opssentinel.state import IncidentState
 from opssentinel.tools.knowledge_base import search_similar_incidents
 
 AGENT_NAME = "hypothesis"
-MAX_ATTEMPTS = 2
+MAX_ATTEMPTS = 2  # free LLM quotas are small, so retry at most once
 MAX_PROMPT_LOGS = 8
+MAX_ALTERNATIVES = 2
 ESCALATE = "escalate_to_human"
 CATALOG_PLACEHOLDER = "<<ACTION_CATALOG>>"
 
 SYSTEM_PROMPT = f"""You are the Root-Cause Hypothesis Agent in an incident response system.
 Given an alert, correlated evidence, similar past incidents and runbooks, produce ranked root-cause
-hypotheses and ONE proposed remediation action.
+hypotheses, ONE proposed remediation action, and optionally alternative actions.
 
 Rules:
 - Base every hypothesis only on the evidence provided. Never invent logs, metrics or deployments.
 - Past incidents are hints, not proof. Prefer causes supported by the current evidence.
 - Runbooks are the approved procedures for each action. If a runbook caution applies to this
   incident, mention it in the rationale, and prefer escalate_to_human over an action the caution rules out.
-- Choose the action ONLY from the action catalog below and fill every required parameter with
+- Choose every action ONLY from the action catalog below and fill every required parameter with
   values found in the evidence (service names, versions, hosts).
-- If no catalog action is clearly justified, use escalate_to_human.
+- If no catalog action is clearly justified, use escalate_to_human as the proposed action.
+- In "alternatives" you may list up to {MAX_ALTERNATIVES} other genuinely plausible actions, best first,
+  each with the same fields as the proposed action. Do not repeat the proposed action. Omit the
+  list or leave it empty when nothing else is plausible.
 - Confidence is a number between 0 and 1.
 
 Action catalog:
@@ -33,7 +37,8 @@ Action catalog:
 
 Respond with ONLY a JSON object (no markdown fences) in exactly this shape:
 {{"hypotheses": [{{"cause": "...", "confidence": 0.0, "evidence": ["..."]}}],
- "proposed_action": {{"action": "<catalog name>", "parameters": {{"<param>": "<value>"}}, "rationale": "..."}}}}
+ "proposed_action": {{"action": "<catalog name>", "parameters": {{"<param>": "<value>"}}, "rationale": "..."}},
+ "alternatives": [{{"action": "<catalog name>", "parameters": {{"<param>": "<value>"}}, "rationale": "..."}}]}}
 List hypotheses from most to least likely."""
 
 
@@ -107,8 +112,7 @@ def _extract_json(text: str) -> dict:
     return json.loads(text[start : end + 1])
 
 
-def _check_action(report: HypothesisReport) -> ActionSpec:
-    proposal = report.proposed_action
+def _check_proposal(proposal: RemediationProposal) -> ActionSpec:
     spec = ACTION_CATALOG.get(proposal.action)
     if spec is None:
         raise ValueError(f"unknown action '{proposal.action}'; choose one of {sorted(ACTION_CATALOG)}")
@@ -116,6 +120,32 @@ def _check_action(report: HypothesisReport) -> ActionSpec:
     if missing:
         raise ValueError(f"action '{proposal.action}' is missing required parameters: {missing}")
     return spec
+
+
+def _signature(proposal: RemediationProposal) -> tuple:
+    return proposal.action, json.dumps(proposal.parameters, sort_keys=True, default=str)
+
+
+def _clean_alternatives(report: HypothesisReport) -> tuple[list[dict], int]:
+    """Keep valid, distinct alternatives (at most MAX_ALTERNATIVES). Returns (kept, dropped count)."""
+    kept: list[dict] = []
+    dropped = 0
+    seen = {_signature(report.proposed_action)}
+    for raw in report.alternatives:
+        try:
+            proposal = RemediationProposal.model_validate(raw)
+            spec = _check_proposal(proposal)
+        except ValueError:
+            dropped += 1
+            continue
+        signature = _signature(proposal)
+        if signature in seen or len(kept) >= MAX_ALTERNATIVES:
+            dropped += 1
+            continue
+        seen.add(signature)
+        # The risk tier comes from the catalog, never from the LLM.
+        kept.append({**proposal.model_dump(), "risk_tier": spec.risk_tier})
+    return kept, dropped
 
 
 def make_hypothesis_agent(llm, search_fn=search_similar_incidents, runbook_fn=None):
@@ -180,7 +210,7 @@ def make_hypothesis_agent(llm, search_fn=search_similar_incidents, runbook_fn=No
                 break
             try:
                 report = HypothesisReport.model_validate(_extract_json(_response_text(response)))
-                spec = _check_action(report)
+                spec = _check_proposal(report.proposed_action)
                 break
             except ValueError as exc:
                 report, spec = None, None
@@ -204,6 +234,7 @@ def make_hypothesis_agent(llm, search_fn=search_similar_incidents, runbook_fn=No
                     "parameters": {},
                     "rationale": f"Automated analysis failed: {failure}",
                 },
+                "alternatives": [],
                 "risk_tier": ACTION_CATALOG[ESCALATE].risk_tier,
                 "status": "escalated",
                 "errors": errors,
@@ -211,17 +242,19 @@ def make_hypothesis_agent(llm, search_fn=search_similar_incidents, runbook_fn=No
             }
 
         hypotheses = sorted(report.hypotheses, key=lambda h: h.confidence, reverse=True)
-        audit_log.append(
-            audit_entry(
-                AGENT_NAME,
-                "hypotheses_ranked",
-                f"top: {hypotheses[0].cause} ({hypotheses[0].confidence:.2f}); "
-                f"proposed {report.proposed_action.action} [{spec.risk_tier} risk]",
-            )
+        alternatives, dropped = _clean_alternatives(report)
+        detail = (
+            f"top: {hypotheses[0].cause} ({hypotheses[0].confidence:.2f}); "
+            f"proposed {report.proposed_action.action} [{spec.risk_tier} risk]; "
+            f"{len(alternatives)} alternative(s)"
         )
+        if dropped:
+            detail += f"; dropped {dropped} invalid or duplicate alternative(s)"
+        audit_log.append(audit_entry(AGENT_NAME, "hypotheses_ranked", detail))
         return {
             "hypotheses": [h.model_dump() for h in hypotheses],
             "proposed_action": report.proposed_action.model_dump(),
+            "alternatives": alternatives,
             "risk_tier": spec.risk_tier,  # from the catalog, never from the LLM
             "status": "hypothesized",
             "errors": errors,

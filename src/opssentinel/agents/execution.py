@@ -45,7 +45,7 @@ def make_execution_agent(infra: SimulatedInfrastructure):
         if action == ESCALATE:
             return finish(
                 "escalated", "escalated",
-                "on-call engineer paged with the incident summary", action, success=True,
+                "escalation recorded for the on-call engineer", action, success=True,
             )
 
         raw_parameters = proposal.get("parameters") or {}
@@ -55,6 +55,7 @@ def make_execution_agent(infra: SimulatedInfrastructure):
                 "failed", "execution_failed",
                 f"{action} is missing parameters: {missing}", action, error=True,
             )
+        # Pass only the parameters the catalog declares; ignore anything extra from the LLM.
         parameters = {name: raw_parameters[name] for name in spec.required_params}
 
         try:

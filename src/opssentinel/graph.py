@@ -8,6 +8,7 @@ from opssentinel.agents.correlation import correlate_incident
 from opssentinel.agents.execution import make_execution_agent
 from opssentinel.agents.hypothesis import make_hypothesis_agent
 from opssentinel.agents.ingestion import make_ingestion_agent
+from opssentinel.agents.notify import make_notify_approval, make_notify_outcome, make_notify_review
 from opssentinel.agents.reporting import DEFAULT_REPORTS_DIR, make_reporting_agent
 from opssentinel.agents.review import review_gate
 from opssentinel.agents.verification import make_verification_agent
@@ -73,14 +74,21 @@ def build_graph(
     dedup_window_minutes: int = 30,
     min_severity: str = "medium",
     runbook_fn=None,
+    notifier=None,
 ):
     """Compile the incident-response graph. A checkpointer is required for interrupts.
 
-    runbook_fn: search function for runbooks. None switches runbook retrieval off, which
-    keeps tests isolated; the CLI passes the real search.
+    runbook_fn: search function for runbooks. None switches runbook retrieval off.
+    notifier: object with send(message). None switches notifications off. Both default to
+    off so tests stay isolated; the CLI passes the real ones.
     """
     infra = infra if infra is not None else SimulatedInfrastructure()
     deduplicator = AlertDeduplicator(dedup_window_minutes)
+
+    # With a notifier, each gate and the report are entered through a notification node.
+    approval_entry = "notify_approval" if notifier is not None else "approval_gate"
+    review_entry = "notify_review" if notifier is not None else "review_gate"
+    report_entry = "notify_outcome" if notifier is not None else "reporting"
 
     builder = StateGraph(IncidentState)
     builder.add_node("ingestion", make_ingestion_agent(deduplicator, min_severity))
@@ -95,39 +103,46 @@ def build_graph(
     builder.add_node("review_gate", review_gate)
     builder.add_node("reporting", make_reporting_agent(reports_dir, learn_fn))
     builder.add_node("close_incident", make_close_node(deduplicator))
+    if notifier is not None:
+        builder.add_node("notify_approval", make_notify_approval(notifier))
+        builder.add_node("notify_review", make_notify_review(notifier))
+        builder.add_node("notify_outcome", make_notify_outcome(notifier))
+        builder.add_edge("notify_approval", "approval_gate")
+        builder.add_edge("notify_review", "review_gate")
+        builder.add_edge("notify_outcome", "reporting")
 
     builder.add_edge(START, "ingestion")
     builder.add_conditional_edges(
         "ingestion",
         route_after_ingestion,
-        {"correlation": "correlation", "reporting": "reporting", END: END},
+        {"correlation": "correlation", "reporting": report_entry, END: END},
     )
     builder.add_conditional_edges(
         "correlation",
         _continue_unless_failed("hypothesis"),
-        {"hypothesis": "hypothesis", "reporting": "reporting"},
+        {"hypothesis": "hypothesis", "reporting": report_entry},
     )
     builder.add_conditional_edges(
         "hypothesis",
         route_after_hypothesis,
-        {"approval_gate": "approval_gate", "execution": "execution", "reporting": "reporting"},
+        {"approval_gate": approval_entry, "execution": "execution", "reporting": report_entry},
     )
     builder.add_conditional_edges(
         "approval_gate",
         route_after_approval,
-        {"execution": "execution", "reporting": "reporting"},
+        {"execution": "execution", "reporting": report_entry},
     )
     builder.add_conditional_edges(
         "execution",
         route_after_execution,
-        {"verifier": "verifier", "reporting": "reporting"},
+        {"verifier": "verifier", "reporting": report_entry},
     )
     builder.add_conditional_edges(
         "verifier",
         route_after_verification,
-        {"review_gate": "review_gate", "reporting": "reporting"},
+        {"review_gate": review_entry, "reporting": report_entry},
     )
-    builder.add_edge("review_gate", "reporting")
+    builder.add_edge("review_gate", report_entry)
     builder.add_edge("reporting", "close_incident")
     builder.add_edge("close_incident", END)
 

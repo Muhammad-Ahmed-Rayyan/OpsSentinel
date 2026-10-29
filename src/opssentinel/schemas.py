@@ -32,7 +32,12 @@ class RemediationProposal(BaseModel):
 
 
 class HypothesisReport(BaseModel):
-    """Validated shape of the LLM's answer."""
+    """Validated shape of the LLM's answer.
+
+    Alternatives are kept as raw items and validated one by one by the agent,
+    so one bad alternative is dropped instead of invalidating the whole answer.
+    """
 
     hypotheses: list[Hypothesis] = Field(min_length=1)
     proposed_action: RemediationProposal
+    alternatives: list[Any] = Field(default_factory=list)
